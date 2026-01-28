@@ -6,35 +6,27 @@ public class AuthClient {
 
     private static final String BASE_URL = "http://localhost:8080/api/auth";
 
-    public static boolean register(String nombre, String apellido, String email, String telefono,
-                                   String puesto, String departamento, String fechaNacimiento, String password) {
+    public static boolean register(String nombreCompleto, String email, String fechaNacimiento,
+                                   String curp, String rfc, String nss,
+                                   String puesto, String password,
+                                   String securityQuestion, String securityAnswer) {
         try {
-            URL url = new URL(BASE_URL + "/register");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setDoOutput(true);
-
             String json = String.format("""
                 {
-                    "nombre":"%s",
-                    "apellido":"%s",
-                    "email":"%s",
-                    "telefono":"%s",
-                    "puesto":"%s",
-                    "departamento":"%s",
-                    "fechaNacimiento":"%s",
-                    "password":"%s"
+                    "nombreCompleto": "%s",
+                    "email": "%s",
+                    "fechaNacimiento": "%s",
+                    "curp": "%s",
+                    "rfc": "%s",
+                    "nss": "%s",
+                    "puestoDeseado": "%s",
+                    "password": "%s",
+                    "securityQuestion": "%s",
+                    "securityAnswer": "%s"
                 }
-                """, nombre, apellido, email, telefono, puesto, departamento, fechaNacimiento, password);
+                """, nombreCompleto, email, fechaNacimiento, curp, rfc, nss, puesto, password, securityQuestion, securityAnswer);
 
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(json.getBytes(StandardCharsets.UTF_8));
-            }
-
-            int code = conn.getResponseCode();
-            System.out.println("Server response code: " + code);
-            return code == 200 || code == 201;
+            return sendPostRequest("/register", json) == 200;
         } catch (Exception e) {
             e.printStackTrace();
             return false;
@@ -43,31 +35,76 @@ public class AuthClient {
 
     public static boolean login(String email, String password) {
         try {
-            URL url = new URL(BASE_URL + "/login");
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setDoOutput(true);
-
             String json = String.format("{\"email\":\"%s\", \"password\":\"%s\"}", email, password);
-
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(json.getBytes(StandardCharsets.UTF_8));
-            }
-
-            int code = conn.getResponseCode();
-            System.out.println("Login response code: " + code);
-
-            if (code == 200) {
-                BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                String token = in.readLine();
-                System.out.println("Token recibido: " + token);
-                return true;
-            }
-            return false;
+            return sendPostRequest("/login", json) == 200;
         } catch (Exception e) {
             e.printStackTrace();
             return false;
         }
+    }
+
+    public static String getSecurityQuestion(String email) {
+        try {
+            String json = String.format("{\"email\":\"%s\"}", email);
+            String response = sendPostRequestWithResponse("/get-question", json);
+
+            if (response != null && response.contains("question")) {
+
+                String[] parts = response.split(":");
+                String questionCode = parts[1].replace("}", "").replace("\"", "").trim();
+                return questionCode;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static boolean resetPassword(String email, String answer, String newPassword) {
+        try {
+            String json = String.format("""
+                {
+                    "email": "%s",
+                    "answer": "%s",
+                    "newPassword": "%s"
+                }
+                """, email, answer, newPassword);
+
+            return sendPostRequest("/reset-with-security", json) == 200;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    private static int sendPostRequest(String endpoint, String jsonInput) throws IOException {
+        URL url = new URL(BASE_URL + endpoint);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(jsonInput.getBytes(StandardCharsets.UTF_8));
+        }
+        return conn.getResponseCode();
+    }
+
+    private static String sendPostRequestWithResponse(String endpoint, String jsonInput) throws IOException {
+        URL url = new URL(BASE_URL + endpoint);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(jsonInput.getBytes(StandardCharsets.UTF_8));
+        }
+
+        if (conn.getResponseCode() == 200) {
+            BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+            return in.readLine();
+        }
+        return null;
     }
 }
